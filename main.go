@@ -4,96 +4,76 @@ import (
 	"encoding/csv"
 	"flag"
 	"fmt"
-	"math/rand"
 	"os"
 	"strings"
 	"time"
 )
 
-var (
-	userInput         string
-	totalProblemCount int
-	rightProblemCount int
-	beenPlaced        []int
-	fTimeInterval     = flag.Int("time", 10, "Time interval per question, default: 10s, limit: 30s")
-	fFP               = flag.String("file", "problems.csv", "CSV file path, default: problems.csv")
-	shuffle           = flag.Bool("shuffle", false, "Shuffle the quizes, default is false")
-)
+type problem struct {
+	q string
+	a string
+}
 
 func main() {
+	fn := flag.String("csv", "problems.csv", "CSV file path format (question, answer)")
+	timer := flag.Int("timer", 30, "Set timer for each question, default value (30seconds)")
 	flag.Parse()
-
-	fmt.Println(*fFP)
-	f, err := os.Open(*fFP)
+	f, err := os.Open(*fn)
 	if err != nil {
-		fmt.Printf("Failed to open file `%s`, please check file path\n", *fFP)
-		os.Exit(1)
-	}
-	defer f.Close()
-
-	rdr := csv.NewReader(f)
-	rows, err := rdr.ReadAll()
-	if err != nil {
-		fmt.Println("It is not a valid csv file")
+		fmt.Printf("Failed to open file: '%s', %v\n", *fn, err)
 		os.Exit(1)
 	}
 
-	// Time limit
-	if *fTimeInterval > 30 {
-		*fTimeInterval = 30
+	data := csv.NewReader(f)
+	rec, err := data.ReadAll()
+	if err != nil {
+		fmt.Printf("Failed to read csv file, %v\n", err)
+		os.Exit(1)
 	}
 
-	totalProblemCount = len(rows)
+	p := make([]problem, len(rec))
+	if err := csvParser(rec, p); err != nil {
+		fmt.Printf("Failed to parse CSV file / %e\n", err)
+		os.Exit(1)
+	}
 
-	for i := range 10000 {
-		var row = []string{}
-		switch {
-		case *shuffle:
-
-			for {
-
-				randN := rand.Intn(totalProblemCount)
-				fmt.Printf("Current rand:%d\n", randN)
-				fmt.Printf("Rand List:%v\n", beenPlaced)
-			out:
-				for i := range beenPlaced {
-					if i == randN {
-						continue out
-					}
-				}
-				beenPlaced = append(beenPlaced, randN)
-				row = rows[randN]
-				break
-			}
-		default:
-			row = rows[i]
-
-		}
-
+	var correct int
+L:
+	for i, row := range p {
 		ch := make(chan int)
-		if len(row) < 2 {
-			panic("It is not a valid csv file, it has to have at lest 2 columns")
-		}
-
-		fmt.Printf("Press Enter to start quiz #%d", i+1)
+		fmt.Print("Press 'enter' to start quiz and timer")
 		fmt.Scanln()
-		fmt.Printf("what is %s: ", row[0])
+		fmt.Printf("Q%d. %s=", i+1, row.q)
 
 		go func() {
-			fmt.Scan(&userInput)
+			var a string
+			fmt.Scan(&a)
 			ch <- 1
+			if strings.TrimSpace(a) == row.a {
+				correct++
+			}
 		}()
-
 		select {
 		case <-ch:
-			if userInput == strings.TrimSpace(row[1]) {
-				rightProblemCount++
-			}
-		case <-time.After(time.Second * time.Duration(*fTimeInterval)):
-			fmt.Println("\nPassed time limit!")
-			return
+		case <-time.After(time.Second * time.Duration(*timer)):
+			fmt.Println("\nPass time limit")
+			break L
 		}
 	}
-	fmt.Printf("Your score: %d%%\n", (rightProblemCount*100)/totalProblemCount)
-	fmt.Printf("Total Problems: %d    Correct Problems: %d\n", totalProblemCount, rightProblemCount)
+
+	fmt.Printf("Quiz Finished got %d out of %d\n", correct, len(rec))
+	fmt.Printf("Score: %d%%\n", (correct*100)/len(rec))
+}
+
+func csvParser(input [][]string, output []problem) error {
+	for i, row := range input {
+		if len(row) != 2 {
+			fmt.Printf("Invalid CSV format row: %v", row)
+			return fmt.Errorf(fmt.Sprintf("Invalid CSV format row: %v", row))
+		}
+		output[i].q = row[0]
+		output[i].a = strings.TrimSpace(row[1])
+	}
+	return nil
+
 }
