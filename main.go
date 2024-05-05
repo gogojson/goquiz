@@ -26,14 +26,16 @@ func main() {
 	fmt.Println(*fFP)
 	f, err := os.Open(*fFP)
 	if err != nil {
-		panic(fmt.Sprintf("Failed to open file `%s`, please check file path", *fFP))
+		fmt.Printf("Failed to open file `%s`, please check file path\n", *fFP)
+		os.Exit(1)
 	}
 	defer f.Close()
 
 	rdr := csv.NewReader(f)
 	rows, err := rdr.ReadAll()
 	if err != nil {
-		panic("It is not a valid csv file")
+		fmt.Println("It is not a valid csv file")
+		os.Exit(1)
 	}
 
 	// Time limit
